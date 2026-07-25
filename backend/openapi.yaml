@@ -402,6 +402,13 @@ paths:
     get:
       operationId: getMeterBalance
       summary: Live balance for a single meter (cached 5 s)
+      description: |
+        Returns the current balance, usage, and active status for a meter.
+        Responses are cached for 5 seconds to reduce RPC load.
+        
+        Cache transparency headers indicate whether data is fresh or cached:
+        - `X-Cache-Status`: HIT (served from cache) or MISS (fresh from contract)
+        - `Age`: Seconds since the data was cached (0 for fresh data)
       tags: [Meters]
       parameters:
         - in: path
@@ -412,6 +419,16 @@ paths:
       responses:
         '200':
           description: Meter balance
+          headers:
+            X-Cache-Status:
+              schema:
+                type: string
+                enum: [HIT, MISS]
+              description: Indicates if response was served from cache
+            Age:
+              schema:
+                type: integer
+              description: Seconds since data was cached (0 for fresh data)
           content:
             application/json:
               schema:
@@ -451,6 +468,15 @@ paths:
       responses:
         '200':
           description: Batch balance response
+          headers:
+            X-Cache-Status:
+              schema:
+                type: string
+              description: Summary of cache hits/misses (e.g., "8 HIT, 2 MISS")
+            X-Cache-Hit-Rate:
+              schema:
+                type: string
+              description: Percentage of requests served from cache (e.g., "80%")
           content:
             application/json:
               schema:

@@ -301,6 +301,9 @@ export function createMeterRouter(stellar: StellarService) {
       // Check cache first
       const cached = balanceCache.get(meterId);
       if (cached && Date.now() - cached.ts < BALANCE_CACHE_TTL_MS) {
+        const ageSeconds = Math.floor((Date.now() - cached.ts) / 1000);
+        res.setHeader("X-Cache-Status", "HIT");
+        res.setHeader("Age", String(ageSeconds));
         return res.json(cached.data);
       }
 
@@ -316,6 +319,8 @@ export function createMeterRouter(stellar: StellarService) {
           active: meter.active,
         };
         balanceCache.set(meterId, { data: payload, ts: Date.now() });
+        res.setHeader("X-Cache-Status", "MISS");
+        res.setHeader("Age", "0");
         res.json(payload);
       } catch (err: any) {
         res.status(404).json({ error: "Meter not found", code: "NOT_FOUND" });
@@ -367,6 +372,8 @@ export function createMeterRouter(stellar: StellarService) {
 
       const balances: any[] = [];
       const errors: Record<string, string> = {};
+      let cacheHits = 0;
+      let cacheMisses = 0;
 
       // Process each meter, using cache where available
       await Promise.all(
@@ -376,6 +383,7 @@ export function createMeterRouter(stellar: StellarService) {
             const cached = balanceCache.get(meterId);
             if (cached && Date.now() - cached.ts < BALANCE_CACHE_TTL_MS) {
               balances.push(cached.data);
+              cacheHits++;
               return;
             }
 
@@ -394,11 +402,18 @@ export function createMeterRouter(stellar: StellarService) {
             // Update cache
             balanceCache.set(meterId, { data: payload, ts: Date.now() });
             balances.push(payload);
+            cacheMisses++;
           } catch (err: any) {
             errors[meterId] = err.message || "Meter not found";
           }
         })
       );
+
+      // Set cache status header for batch request
+      const totalRequested = ids.length;
+      const cacheHitRate = totalRequested > 0 ? Math.round((cacheHits / totalRequested) * 100) : 0;
+      res.setHeader("X-Cache-Status", `${cacheHits} HIT, ${cacheMisses} MISS`);
+      res.setHeader("X-Cache-Hit-Rate", `${cacheHitRate}%`);
 
       res.json({ 
         balances,
